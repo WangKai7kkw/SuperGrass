@@ -1,55 +1,55 @@
-	ID	Phase	Diets
-0	ERR1842970	rumen fluid	corn
-1	ERR1842971	rumen fluid	corn
-2	ERR1842972	rumen fluid	corn
-3	ERR1842973	rumen fluid	grass
-4	ERR1842974	rumen fluid	grass
-5	ERR1842975	rumen fluid	grass
-6	ERR1842976	rumen fluid	hay
-7	ERR1842977	rumen fluid	hay
-8	ERR1842978	rumen fluid	hay
-9	ERR1842979	liquid phase	corn
-10	ERR1842980	liquid phase	corn
-11	ERR1842981	liquid phase	corn
-12	ERR1842982	liquid phase	grass
-13	ERR1842983	liquid phase	grass
-14	ERR1842984	liquid phase	grass
-15	ERR1842985	liquid phase	hay
-16	ERR1842986	liquid phase	hay
-17	ERR1842987	liquid phase	hay
-18	ERR1842988	solid phase	corn
-19	ERR1842989	solid phase	corn
-20	ERR1842990	solid phase	corn
-21	ERR1842991	solid phase	grass
-22	ERR1842992	solid phase	grass
-23	ERR1842993	solid phase	grass
-24	ERR1842994	solid phase	hay
-25	ERR1842995	solid phase	hay
-26	ERR1842996	solid phase	hay
-27	ERR1842997	rumen fluid	corn
-28	ERR1842998	rumen fluid	corn
-29	ERR1842999	rumen fluid	corn
-30	ERR1843000	rumen fluid	grass
-31	ERR1843001	rumen fluid	grass
-32	ERR1843002	rumen fluid	grass
-33	ERR1843003	rumen fluid	hay
-34	ERR1843004	rumen fluid	hay
-35	ERR1843005	rumen fluid	hay
-36	ERR1843006	liquid phase	corn
-37	ERR1843007	liquid phase	corn
-38	ERR1843008	liquid phase	corn
-39	ERR1843009	liquid phase	grass
-40	ERR1843010	liquid phase	grass
-41	ERR1843011	liquid phase	grass
-42	ERR1843012	liquid phase	hay
-43	ERR1843013	liquid phase	hay
-44	ERR1843014	liquid phase	hay
-45	ERR1843015	solid phase	corn
-46	ERR1843016	solid phase	corn
-47	ERR1843017	solid phase	corn
-48	ERR1843018	solid phase	grass
-49	ERR1843019	solid phase	grass
-50	ERR1843020	solid phase	grass
-51	ERR1843021	solid phase	hay
-52	ERR1843022	solid phase	hay
-53	ERR1843023	solid phase	hay
+ID	Phase	Diets
+ERR1842970	rumen fluid	corn
+ERR1842971	rumen fluid	corn
+ERR1842972	rumen fluid	corn
+ERR1842973	rumen fluid	grass
+ERR1842974	rumen fluid	grass
+ERR1842975	rumen fluid	grass
+ERR1842976	rumen fluid	hay
+ERR1842977	rumen fluid	hay
+ERR1842978	rumen fluid	hay
+ERR1842979	liquid phase	corn
+ERR1842980	liquid phase	corn
+ERR1842981	liquid phase	corn
+ERR1842982	liquid phase	grass
+ERR1842983	liquid phase	grass
+ERR1842984	liquid phase	grass
+ERR1842985	liquid phase	hay
+ERR1842986	liquid phase	hay
+ERR1842987	liquid phase	hay
+ERR1842988	solid phase	corn
+ERR1842989	solid phase	corn
+ERR1842990	solid phase	corn
+ERR1842991	solid phase	grass
+ERR1842992	solid phase	grass
+ERR1842993	solid phase	grass
+ERR1842994	solid phase	hay
+ERR1842995	solid phase	hay
+ERR1842996	solid phase	hay
+ERR1842997	rumen fluid	corn
+ERR1842998	rumen fluid	corn
+ERR1842999	rumen fluid	corn
+ERR1843000	rumen fluid	grass
+ERR1843001	rumen fluid	grass
+ERR1843002	rumen fluid	grass
+ERR1843003	rumen fluid	hay
+ERR1843004	rumen fluid	hay
+ERR1843005	rumen fluid	hay
+ERR1843006	liquid phase	corn
+ERR1843007	liquid phase	corn
+ERR1843008	liquid phase	corn
+ERR1843009	liquid phase	grass
+ERR1843010	liquid phase	grass
+ERR1843011	liquid phase	grass
+ERR1843012	liquid phase	hay
+ERR1843013	liquid phase	hay
+ERR1843014	liquid phase	hay
+ERR1843015	solid phase	corn
+ERR1843016	solid phase	corn
+ERR1843017	solid phase	corn
+ERR1843018	solid phase	grass
+ERR1843019	solid phase	grass
+ERR1843020	solid phase	grass
+ERR1843021	solid phase	hay
+ERR1843022	solid phase	hay
+ERR1843023	solid phase	hay
