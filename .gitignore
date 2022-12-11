@@ -1,4 +1,8 @@
 # ignore raw sequence data (output of fondue)
+0-fondue-output/
+0-paired_reads/
+1-seqs_arc.qza
+1-seqs_bac.qza
 fondue-output*
-study-id.qza
-study-id.tsv
+
+
