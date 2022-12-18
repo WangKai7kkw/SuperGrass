@@ -4,5 +4,15 @@
 1-seqs_arc.qza
 1-seqs_bac.qza
 fondue-output*
-
+3-silva-138-ssu-nr99-seqs.qza
+3-silva-138-ssu-nr99-tax.qza
+3-silva-138-ssu-nr99-seqs-filt.qza
+3-silva-138-ssu-nr99-seqs-discard.qza
+3-silva-138-ssu-nr99-seqs-cleaned.qza
+3-silva-138-ssu-nr99-seqs-derep-uniq.qza
+3-silva-138-ssu-nr99-tax-derep-uniq.qza
+3-silva-138-ssu-nr99-seqs-349f-806r.qza
+3-silva-138-ssu-nr99-seqs-27f-338r.qza
+3-classifier-27f-308r.qza
+3-classifier-349f-806r.qza
 
