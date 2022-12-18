@@ -1,0 +1,326 @@
+---
+title: 'Alpha diversity: Linear Mixed Model'
+output:
+  html_document:
+    df_print: paged
+---
+
+> Based on the experimental design (3 x 3 Latin Squares), alpha diversity indices were fitted with linear mixed models to test interaction effects between phase and diet type.
+
+```{r message=FALSE, warning=FALSE}
+# loading required packages
+library(lme4)
+library(lmerTest)
+library(tidyverse)
+library(emmeans)
+library(ggpubr)
+```
+
+
+# 1. Export data from Qiime2 artifact files
+
+```{r message=FALSE, warning=FALSE}
+# observed features
+system('qiime tools export \\
+          --input-path Results/2-core-metrics_bac/observed_features_vector.qza \\
+          --output-path Results/2-core-metrics_bac/')
+system('mv Results/2-core-metrics_bac/alpha-diversity.tsv Results/2-core-metrics_bac/observed_features.tsv')
+
+# faith pd
+system('qiime tools export \\
+          --input-path Results/2-core-metrics_bac/faith_pd_vector.qza \\
+          --output-path Results/2-core-metrics_bac/')
+system('mv Results/2-core-metrics_bac/alpha-diversity.tsv Results/2-core-metrics_bac/faith_pd.tsv')
+
+# shannon
+system('qiime tools export \\
+          --input-path Results/2-core-metrics_bac/shannon_vector.qza \\
+          --output-path Results/2-core-metrics_bac/')
+system('mv Results/2-core-metrics_bac/alpha-diversity.tsv Results/2-core-metrics_bac/shannon.tsv')
+
+# eveness
+system('qiime tools export \\
+          --input-path Results/2-core-metrics_bac/evenness_vector.qza \\
+          --output-path Results/2-core-metrics_bac/')
+system('mv Results/2-core-metrics_bac/alpha-diversity.tsv Results/2-core-metrics_bac/evenness.tsv')
+```
+
+# 2. Data preparation
+
+## 2.1 Loading metrics and metadata
+
+```{r}
+# load data
+observed <- read.delim('Results/2-core-metrics_bac/observed_features.tsv', row.names = 1)
+faith_pd <- read.delim('Results/2-core-metrics_bac/faith_pd.tsv', row.names = 1)
+shannon <- read.delim('Results/2-core-metrics_bac/shannon.tsv', row.names = 1)
+evenness <- read.delim('Results/2-core-metrics_bac/evenness.tsv', row.names = 1)
+metadata <- read.delim('Data/0-exported-metadata/sra-metadata.tsv', row.names = 1, check.names = FALSE)
+```
+
+## 2.2 Curate metadata
+
+Column `Title` in the metadata contains information about animal identification and PCR library types, which are retrieved here. A and B stand for corresponding archaea or bacteria library.
+
+```{r}
+metadata[, 'Animal_ID'] <- str_extract(string = metadata$Title, pattern = '[0-9][0-9]')
+metadata[, 'PCR'] <- ifelse(str_detect(metadata$Title, 'A$'), 'A', 'B')
+```
+
+Column `Description [sample]` contains information about diet treatments [Diet], and sample types [Phase] from which parts of rumen contents samples were collected. However, period of treatment cannot be inferred here with a high confidence, random effect of period will not be considered in linear mixed models.
+
+```{r}
+metadata[, 'Phase'] <- do.call(paste,
+                               data.frame(
+                                 str_split_fixed(
+                                   string = metadata$`Description [sample]`, 
+                                   pattern = ' ', n = 3)[, 1:2]))
+metadata[, 'Diet'] <- str_split_fixed(string = metadata$`Description [sample]`, pattern = ' ', n = 3)[, 3]
+```
+
+```{r}
+metadata <- metadata[c('Animal_ID', 'PCR', 'Phase', 'Diet')]
+metadata[, 'Animal_ID'] <- as.factor(metadata[, 'Animal_ID'])
+head(metadata)
+```
+
+## 2.3 Merging alpha diversity indices and metadata
+
+```{r}
+data_merged <- cbind(observed, faith_pd, evenness, shannon, metadata[rownames(observed), ])
+```
+
+# 3. Model fitting
+
+
+## 3.1 Observed features
+
+### model
+```{r}
+fit_obsf <- lmer(observed_features ~ Phase * Diet + (1|Animal_ID),
+     data = data_merged)
+```
+
+### anova: fixed effects
+
+```{r}
+anova(fit_obsf)
+```
+### model diagnosis
+
+```{r}
+qqnorm(residuals(fit_obsf))
+qqline(residuals(fit_obsf))
+```
+## 3.2 Faith PD
+
+### model
+
+Model fitting is singular, so we can leave random effect of animal out of model.
+
+```{r}
+fit_fapd <- lmer(faith_pd ~ Phase * Diet + (1|Animal_ID),
+     data = data_merged)
+```
+
+### anova: fixed effects
+
+```{r}
+anova(fit_fapd)
+```
+### model diagnosis
+
+```{r}
+qqnorm(residuals(fit_fapd))
+qqline(residuals(fit_fapd))
+```
+## 3.3 Shannon
+
+### model
+
+Model fitting is singular, so we can leave random effect of animal out of model.
+
+```{r}
+fit_shan <- lmer(shannon_entropy ~ Phase * Diet + (1|Animal_ID),
+     data = data_merged)
+```
+
+### anova: fixed effects
+
+```{r}
+anova(fit_shan)
+```
+### model diagnosis
+
+```{r}
+qqnorm(residuals(fit_shan))
+qqline(residuals(fit_shan))
+```
+## 3.4 evenness
+
+### model
+
+Model fitting is singular, so we can leave random effect of animal out of model.
+
+```{r}
+fit_even <- lmer(pielou_evenness ~ Phase * Diet + (1|Animal_ID),
+     data = data_merged)
+```
+
+### anova: fixed effects
+
+```{r}
+anova(fit_even)
+```
+### model diagnosis
+
+```{r}
+qqnorm(residuals(fit_even))
+qqline(residuals(fit_even))
+```
+
+
+
+
+
+
+
+
+
+
+# 4. Visulization
+
+## 4.1 Defining visualize function
+
+```{r}
+vis <- function(fit, ylab = "", xadj = 0.25, yadj = 0.05){
+  # fit = fit_obsf
+  # xadj = 0.25
+  # yadj = 0.1
+  # ylab = ""
+  
+  # LSM
+  lsm_df <- data.frame(emmeans(fit, ~ Diet | Phase))
+  
+  # contrast
+  contrast_df <- data.frame(contrast(emmeans(fit, ~ Diet | Phase), 'pairwise'))
+  contrast_df[, c('start', 'end')] <- str_split_fixed(contrast_df$contrast, pattern = " - ", n = 2)
+  contrast_levels <- union(unique(contrast_df$start), unique(contrast_df$end))
+  contrast_df[, 'contrast_id'] <- contrast_df[, 'contrast']
+  for (i in 1:length(contrast_levels)) {
+      contrast_df[, 'contrast_id'] <- gsub(pattern = contrast_levels[i], 
+                                           replacement = i, 
+                                           x = contrast_df[, 'contrast_id'])
+  }
+  
+  contrast_df[, 'x'] <- ifelse(contrast_df$Phase == "solid phase", 1,
+                               ifelse(contrast_df$Phase == "liquid phase", 2, 3))
+  
+  contrast_df[, c('xmin')] <- ifelse(contrast_df$start == "corn", -xadj, 
+                                     ifelse(contrast_df$start == "grass", 0, +xadj))
+  contrast_df[, c('xmax')] <- ifelse(contrast_df$end == "corn", -xadj, 
+                                     ifelse(contrast_df$end == "grass", 0, +xadj))
+  contrast_df[, c('xmin')] <-  contrast_df[, c('xmin')] + contrast_df$x
+  contrast_df[, c('xmax')] <-  contrast_df[, c('xmax')] + contrast_df$x
+  
+  
+  for (i in 1:nrow(contrast_df)) {
+    idx = which(lsm_df$Phase == contrast_df$Phase[i] & lsm_df$Diet == contrast_df$start[i])
+    contrast_df[i, 'y_start'] <- (lsm_df[idx, 'emmean'] + lsm_df[idx, 'SE'])*(1+yadj)
+  }
+  
+  contrast_df[, 'y_middle'] <- rep(contrast_df[contrast_df$start == "grass", 'y_start'], each = 3)
+  
+  contrast_df[, 'y'] <- ifelse(contrast_df$estimate > 0, 
+                               contrast_df[, 'y_start'], 
+                               contrast_df[, 'y_start']-contrast_df[, 'estimate'])
+  
+  contrast_df[, 'y'] <- ifelse(contrast_df$y < contrast_df$y_middle,
+                               contrast_df$y_middle,
+                               contrast_df$y)
+  
+  contrast_df[, 'y_1_vs_2'] <- rep(contrast_df[contrast_df$contrast_id == "1 - 2", 'y'], 
+                                     each = 3)
+  contrast_df[, 'y_2_vs_3'] <- rep(contrast_df[contrast_df$contrast_id == "2 - 3", 'y'], 
+                                     each = 3)
+  
+  contrast_df[, 'y'] <- ifelse(contrast_df$contrast_id == "1 - 3",
+                               ifelse(contrast_df$y >= contrast_df$y_1_vs_2*(1+yadj), 
+                                      contrast_df$y, 
+                                      contrast_df$y_1_vs_2*(1+yadj)), 
+                               contrast_df$y
+                               )
+    contrast_df[, 'y'] <- ifelse(contrast_df$contrast_id == "1 - 3",
+                               ifelse(contrast_df$y >= contrast_df$y_2_vs_3*(1+yadj), 
+                                      contrast_df$y, 
+                                      contrast_df$y_2_vs_3*(1+yadj)), 
+                               contrast_df$y
+                               )
+
+  
+  
+  contrast_df[, 'p'] <- "*"
+  contrast_df <- contrast_df[contrast_df$p.value < 0.05, ]
+  
+
+  lsm_df$Phase <- factor(lsm_df$Phase, 
+                         levels = c('solid phase', 'liquid phase', 'rumen fluid'),
+                         labels = c('Solid\nphase', 'Liquid\nphase', 'Rumen\nfluid'))
+  
+  lsm_df$Diet <- factor(lsm_df$Diet, 
+                         levels = c('corn', 'grass', 'hay'),
+                         labels = c('Corn', 'Grass', 'Hay'))
+  
+  # plot
+  plot0 <- ggplot(lsm_df, aes(Phase, emmean, fill = Diet, color = Diet)) +
+            geom_col(position = position_dodge2()) +
+            geom_errorbar(aes(ymin=emmean-SE, ymax=emmean+SE), 
+                          position = position_dodge(width = 0.9),
+                          width = 0.5, size = 0.75) +
+            labs(y = ylab) +
+            theme(plot.background = element_blank(),
+                  panel.grid = element_blank(),
+                  panel.background = element_blank(),
+                  axis.line = element_line(linewidth = 1, colour = 'black'),
+                  axis.title = element_text(size = 20, face = "bold", colour = "black"),
+                  axis.text = element_text(size = 18, face = "bold", colour = "black"),
+                  axis.text.x = element_text(angle = 0, hjust = 0.5, vjust = 0.5),
+                  axis.title.x = element_text(margin = unit(c(5, 0, 0, 0), 'mm')),
+                  axis.title.y = element_text(margin = unit(c(0, 5, 0, 0), 'mm')),
+                  legend.text = element_text(size = 18, face = "bold", colour = "black"),
+                  legend.title = element_text(size = 18, face = "bold", colour = "black")
+                  )
+  
+  if (nrow(contrast_df) > 0) {
+    plot0 <- plot0 + 
+      geom_signif(annotations = contrast_df$p, 
+                  xmin = contrast_df$xmin,
+                  xmax = contrast_df$xmax,
+                  y_position =contrast_df$y, 
+                  size = 0.75, vjust = 0.5, tip_length = 0.05,
+                  color="black")
+  }
+  
+
+  return(plot0)
+}
+
+```
+
+```{r}
+vis(fit_obsf, 'Observed features')
+```
+
+```{r}
+vis(fit_fapd, 'Faith PD')
+```
+
+```{r}
+vis(fit_shan, 'Shannon')
+```
+
+```{r}
+vis(fit_even, 'Evenness')
+```
+
+
