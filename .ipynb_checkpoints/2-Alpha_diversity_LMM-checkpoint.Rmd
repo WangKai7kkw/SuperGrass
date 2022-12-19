@@ -3,10 +3,9 @@ title: 'Alpha diversity: Linear Mixed Model'
 output:
   html_document:
     df_print: paged
-  pdf_document: default
 ---
 
-Based on the experimental design (3 x 3 Latin Squares), we will fit linear mixed models for alpha diversity indices to test interaction effect between phase and diet type. Random effect of cow will be removed if a mixed model is singular.
+> Based on the experimental design (3 x 3 Latin Squares), alpha diversity indices were fitted with linear mixed models to test interaction effects between phase and diet type.
 
 ```{r message=FALSE, warning=FALSE}
 # loading required packages
@@ -18,88 +17,44 @@ library(ggpubr)
 ```
 
 
-
-# 1. Extract data from Qiime2 artifact files
-
-## 1.1 Bacteria
+# 1. Export data from Qiime2 artifact files
 
 ```{r message=FALSE, warning=FALSE}
 # observed features
 system('qiime tools export \\
           --input-path Results/2-core-metrics_bac/observed_features_vector.qza \\
           --output-path Results/2-core-metrics_bac/')
-system('mv Results/2-core-metrics_bac/alpha-diversity.tsv Results/2-core-metrics_bac/observed_features_vector.tsv')
+system('mv Results/2-core-metrics_bac/alpha-diversity.tsv Results/2-core-metrics_bac/observed_features.tsv')
 
 # faith pd
 system('qiime tools export \\
           --input-path Results/2-core-metrics_bac/faith_pd_vector.qza \\
           --output-path Results/2-core-metrics_bac/')
-system('mv Results/2-core-metrics_bac/alpha-diversity.tsv Results/2-core-metrics_bac/faith_pd_vector.tsv')
+system('mv Results/2-core-metrics_bac/alpha-diversity.tsv Results/2-core-metrics_bac/faith_pd.tsv')
 
 # shannon
 system('qiime tools export \\
           --input-path Results/2-core-metrics_bac/shannon_vector.qza \\
           --output-path Results/2-core-metrics_bac/')
-system('mv Results/2-core-metrics_bac/alpha-diversity.tsv Results/2-core-metrics_bac/shannon_vector.tsv')
+system('mv Results/2-core-metrics_bac/alpha-diversity.tsv Results/2-core-metrics_bac/shannon.tsv')
 
 # eveness
 system('qiime tools export \\
           --input-path Results/2-core-metrics_bac/evenness_vector.qza \\
           --output-path Results/2-core-metrics_bac/')
-system('mv Results/2-core-metrics_bac/alpha-diversity.tsv Results/2-core-metrics_bac/evenness_vector.tsv')
+system('mv Results/2-core-metrics_bac/alpha-diversity.tsv Results/2-core-metrics_bac/evenness.tsv')
 ```
-
-## 1.2 Archaea
-
-```{r message=FALSE, warning=FALSE}
-# observed features
-system('qiime tools export \\
-          --input-path Results/2-core-metrics_arc/observed_features_vector.qza \\
-          --output-path Results/2-core-metrics_arc/')
-system('mv Results/2-core-metrics_arc/alpha-diversity.tsv Results/2-core-metrics_arc/observed_features_vector.tsv')
-
-# faith pd
-system('qiime tools export \\
-          --input-path Results/2-core-metrics_arc/faith_pd_vector.qza \\
-          --output-path Results/2-core-metrics_arc/')
-system('mv Results/2-core-metrics_arc/alpha-diversity.tsv Results/2-core-metrics_arc/faith_pd_vector.tsv')
-
-# shannon
-system('qiime tools export \\
-          --input-path Results/2-core-metrics_arc/shannon_vector.qza \\
-          --output-path Results/2-core-metrics_arc/')
-system('mv Results/2-core-metrics_arc/alpha-diversity.tsv Results/2-core-metrics_arc/shannon_vector.tsv')
-
-# eveness
-system('qiime tools export \\
-          --input-path Results/2-core-metrics_arc/evenness_vector.qza \\
-          --output-path Results/2-core-metrics_arc/')
-system('mv Results/2-core-metrics_arc/alpha-diversity.tsv Results/2-core-metrics_arc/evenness_vector.tsv')
-```
-
 
 # 2. Data preparation
 
 ## 2.1 Loading metrics and metadata
 
 ```{r}
-# load and combine bacteria metrics into a data frame
-files_bac <- list.files('Results/2-core-metrics_bac', "*vector.tsv", recursive = TRUE, full.names = TRUE)
-
-data_bac <- lapply(files_bac, function(x){read.delim(x, row.names = 1)})
-data_bac <- do.call(cbind, data_bac)
-```
-
-```{r}
-# load and combine archaea metrics into a data frame
-files_arc <- list.files('Results/2-core-metrics_arc', "*vector.tsv", recursive = TRUE, full.names = TRUE)
-
-data_arc <- lapply(files_arc, function(x){read.delim(x, row.names = 1)})
-data_arc <- do.call(cbind, data_arc)
-```
-
-```{r}
-# metadata
+# load data
+observed <- read.delim('Results/2-core-metrics_bac/observed_features.tsv', row.names = 1)
+faith_pd <- read.delim('Results/2-core-metrics_bac/faith_pd.tsv', row.names = 1)
+shannon <- read.delim('Results/2-core-metrics_bac/shannon.tsv', row.names = 1)
+evenness <- read.delim('Results/2-core-metrics_bac/evenness.tsv', row.names = 1)
 metadata <- read.delim('Data/0-exported-metadata/sra-metadata.tsv', row.names = 1, check.names = FALSE)
 ```
 
@@ -132,149 +87,108 @@ head(metadata)
 ## 2.3 Merging alpha diversity indices and metadata
 
 ```{r}
-data_arc_merged <- cbind(data_arc, metadata[rownames(data_arc), ])
-data_bac_merged <- cbind(data_bac, metadata[rownames(data_bac), ])
+data_merged <- cbind(observed, faith_pd, evenness, shannon, metadata[rownames(observed), ])
 ```
 
 # 3. Model fitting
 
-## 3.1 Bacteria
 
-### model 
+## 3.1 Observed features
 
+### model
 ```{r}
-# observed features
-fit_obsf_bac <- lmer(observed_features ~ Phase * Diet + (1|Animal_ID),
-     data = data_bac_merged)
-#faith pd
-fit_fapd_bac <- lmer(faith_pd ~ Phase * Diet + (1|Animal_ID),
-     data = data_bac_merged)
-# shannon
-fit_shan_bac <- lmer(shannon_entropy ~ Phase * Diet + (1|Animal_ID),
-     data = data_bac_merged)
-# pielou's evenness
-fit_even_bac <- lmer(pielou_evenness ~ Phase * Diet + (1|Animal_ID),
-     data = data_bac_merged)
+fit_obsf <- lmer(observed_features ~ Phase * Diet + (1|Animal_ID),
+     data = data_merged)
 ```
 
+### anova: fixed effects
+
+```{r}
+anova(fit_obsf)
+```
 ### model diagnosis
 
 ```{r}
-qqnorm(residuals(fit_obsf_bac))
-qqline(residuals(fit_obsf_bac))
-
-qqnorm(residuals(fit_fapd_bac))
-qqline(residuals(fit_fapd_bac))
-
-qqnorm(residuals(fit_shan_bac))
-qqline(residuals(fit_shan_bac))
-
-qqnorm(residuals(fit_even_bac))
-qqline(residuals(fit_even_bac))
+qqnorm(residuals(fit_obsf))
+qqline(residuals(fit_obsf))
 ```
+## 3.2 Faith PD
 
-### fixed effects, ANOVA
+### model
+
+Model fitting is singular, so we can leave random effect of animal out of model.
 
 ```{r}
-anova(fit_obsf_bac)
-anova(fit_fapd_bac)
-anova(fit_shan_bac)
-anova(fit_even_bac)
+fit_fapd <- lmer(faith_pd ~ Phase * Diet + (1|Animal_ID),
+     data = data_merged)
 ```
 
-### fixed effects, LSM
+### anova: fixed effects
 
 ```{r}
-# observed features
-emmeans(fit_obsf_bac, ~ Diet)
-emmeans(fit_obsf_bac, ~ Phase)
+anova(fit_fapd)
 ```
-```{r}
-# faith pd
-emmeans(fit_fapd_bac, ~ Diet)
-emmeans(fit_fapd_bac, ~ Phase)
-```
-```{r}
-# shannon
-emmeans(fit_shan_bac, ~ Diet)
-emmeans(fit_shan_bac, ~ Phase)
-```
-
-```{r}
-# shannon
-emmeans(fit_even_bac, ~ Diet)
-emmeans(fit_even_bac, ~ Phase)
-```
-
-## 3.2 Archaea
-
-### model 
-
-```{r}
-# observed features
-fit_obsf_arc <- lmer(observed_features ~ Phase * Diet + (1|Animal_ID),
-     data = data_arc_merged)
-#faith pd
-fit_fapd_arc <- lmer(faith_pd ~ Phase * Diet + (1|Animal_ID),
-     data = data_arc_merged)
-# shannon
-fit_shan_arc <- lmer(shannon_entropy ~ Phase * Diet + (1|Animal_ID),
-     data = data_arc_merged)
-# pielou's evenness
-fit_even_arc <- lmer(pielou_evenness ~ Phase * Diet + (1|Animal_ID),
-     data = data_arc_merged)
-```
-
 ### model diagnosis
 
 ```{r}
-qqnorm(residuals(fit_obsf_arc))
-qqline(residuals(fit_obsf_arc))
-
-qqnorm(residuals(fit_fapd_arc))
-qqline(residuals(fit_fapd_arc))
-
-qqnorm(residuals(fit_shan_arc))
-qqline(residuals(fit_shan_arc))
-
-qqnorm(residuals(fit_even_arc))
-qqline(residuals(fit_even_arc))
+qqnorm(residuals(fit_fapd))
+qqline(residuals(fit_fapd))
 ```
+## 3.3 Shannon
 
-### fixed effects, ANOVA
+### model
+
+Model fitting is singular, so we can leave random effect of animal out of model.
 
 ```{r}
-anova(fit_obsf_arc)
-anova(fit_fapd_arc)
-anova(fit_shan_arc)
-anova(fit_even_arc)
+fit_shan <- lmer(shannon_entropy ~ Phase * Diet + (1|Animal_ID),
+     data = data_merged)
 ```
 
-### fixed effects, LSM
+### anova: fixed effects
 
 ```{r}
-# observed features
-emmeans(fit_obsf_arc, ~ Diet)
-emmeans(fit_obsf_arc, ~ Phase)
+anova(fit_shan)
 ```
-```{r}
-# faith pd
-emmeans(fit_fapd_arc, ~ Diet)
-emmeans(fit_fapd_arc, ~ Phase)
-```
-```{r}
-# shannon
-emmeans(fit_shan_arc, ~ Diet)
-emmeans(fit_shan_arc, ~ Phase)
-```
+### model diagnosis
 
 ```{r}
-# shannon
-emmeans(fit_even_arc, ~ Diet)
-emmeans(fit_even_arc, ~ Phase)
+qqnorm(residuals(fit_shan))
+qqline(residuals(fit_shan))
+```
+## 3.4 evenness
+
+### model
+
+Model fitting is singular, so we can leave random effect of animal out of model.
+
+```{r}
+fit_even <- lmer(pielou_evenness ~ Phase * Diet + (1|Animal_ID),
+     data = data_merged)
 ```
 
-# 4 Visualization
+### anova: fixed effects
+
+```{r}
+anova(fit_even)
+```
+### model diagnosis
+
+```{r}
+qqnorm(residuals(fit_even))
+qqline(residuals(fit_even))
+```
+
+
+
+
+
+
+
+
+
+
+# 4. Visulization
 
 ## 4.1 Defining visualize function
 
@@ -390,28 +304,23 @@ vis <- function(fit, ylab = "", xadj = 0.25, yadj = 0.05){
 
   return(plot0)
 }
-```
 
-## 4.2 Bacteria
-
-```{r}
-vis(fit_obsf_bac, 'Observed features')
-vis(fit_fapd_bac, 'Faith PD')
-vis(fit_shan_bac, 'Shannon')
-vis(fit_even_bac, 'Evenness')
-```
-
-## 4.3 Archaea
-
-```{r}
-vis(fit_obsf_arc, 'Observed features')
-vis(fit_fapd_arc, 'Faith PD')
-vis(fit_shan_arc, 'Shannon')
-vis(fit_even_arc, 'Evenness')
 ```
 
 ```{r}
-emmeans(fit_shan_arc, pairwise ~ Diet)
-emmeans(fit_shan_arc, pairwise ~ Phase)
+vis(fit_obsf, 'Observed features')
 ```
+
+```{r}
+vis(fit_fapd, 'Faith PD')
+```
+
+```{r}
+vis(fit_shan, 'Shannon')
+```
+
+```{r}
+vis(fit_even, 'Evenness')
+```
+
 
