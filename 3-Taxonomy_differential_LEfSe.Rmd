@@ -1,0 +1,418 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+
+```{r}
+# loading required packages and setting qiime2 environment
+Sys.setenv(PATH = paste0(Sys.getenv("PATH"), ":/Users/wangkai/opt/anaconda3/envs/qiime2/bin"))
+library(tidyverse)
+
+if (!requireNamespace("BiocManager", quietly=TRUE))
+    install.packages("BiocManager")
+if (!requireNamespace("MicrobiotaProcess", quietly=TRUE))
+    BiocManager::install("MicrobiotaProcess")
+library(MicrobiotaProcess)
+library(ggsci)
+```
+
+
+# 1. Data preparation
+
+## 1.1 Extract data from Qiime2 artifact files
+
+```{r message=FALSE, warning=FALSE}
+# bray curtis
+system('qiime tools export \\
+          --input-path Data/1-feature-table_bac.qza \\
+          --output-path Data/')
+system('mv Data/feature-table.biom Data/1-feature-table_bac.biom')
+system('biom convert -i Data/1-feature-table_bac.biom -o Data/1-feature-table_bac.tsv --to-tsv')
+
+system('qiime tools export \\
+          --input-path Data/1-feature-table_arc.qza \\
+          --output-path Data/')
+system('mv Data/feature-table.biom Data/1-feature-table_arc.biom')
+system('biom convert -i Data/1-feature-table_arc.biom -o Data/1-feature-table_arc.tsv --to-tsv')
+```
+```{r}
+system('qiime tools export \\
+          --input-path Results/3-taxonomy_bac.qza \\
+          --output-path Results/')
+system('mv Results/taxonomy.tsv Results/3-taxonomy_bac.tsv')
+
+system('qiime tools export \\
+          --input-path Results/3-taxonomy_arc.qza \\
+          --output-path Results/')
+system('mv Results/taxonomy.tsv Results/3-taxonomy_arc.tsv')
+```
+
+## 1.2 Load feature table and taxonomy
+
+```{r}
+feature_table_bac <- read.delim("Data/1-feature-table_bac.tsv", skip = 1, row.names = 1)
+feature_table_arc <- read.delim("Data/1-feature-table_arc.tsv", skip = 1, row.names = 1)
+taxonomy_bac <- read.delim("Results/3-taxonomy_bac.tsv", row.names = 1)
+taxonomy_arc <- read.delim("Results/3-taxonomy_arc.tsv", row.names = 1)
+```
+
+
+## 1.3 Curate metadata
+
+Column `Title` in the metadata contains information about animal identification and PCR library types, which are retrieved here. A and B stand for corresponding archaea or bacteria library.
+
+```{r}
+metadata <- read.delim('Data/0-exported-metadata/sra-metadata.tsv', row.names = 1, check.names = FALSE)
+
+metadata[, 'Animal_ID'] <- str_extract(string = metadata$Title, pattern = '[0-9][0-9]')
+metadata[, 'PCR'] <- ifelse(str_detect(metadata$Title, 'A$'), 'A', 'B')
+```
+
+Column `Description [sample]` contains information about diet treatments [Diet], and sample types [Phase] from which parts of rumen contents samples were collected. However, period of treatment cannot be inferred here with a high confidence, random effect of period will not be considered in linear mixed models.
+
+```{r}
+metadata[, 'Phase'] <- do.call(paste,
+                               data.frame(
+                                 str_split_fixed(
+                                   string = metadata$`Description [sample]`, 
+                                   pattern = ' ', n = 3)[, 1:2]))
+metadata[, 'Diet'] <- str_split_fixed(string = metadata$`Description [sample]`, pattern = ' ', n = 3)[, 3]
+metadata$Phase <- factor(metadata$Phase, levels = c("solid phase", "liquid phase", "rumen fluid"), 
+                         labels = c("Solid phase", "Liquid phase", "Rumen fluid"))
+
+metadata$Diet <- factor(metadata$Diet, levels = c("corn", "grass", "hay"), 
+                         labels = c("Corn silage", "Grass silage", "Grass hay"))
+```
+
+Select columns needed for analysis
+
+```{r}
+metadata <- metadata[c('Animal_ID', 'PCR', 'Phase', 'Diet')]
+metadata[, 'Animal_ID'] <- as.factor(metadata[, 'Animal_ID'])
+head(metadata)
+```
+
+Subsets of metadata for two PCR libraries.
+
+```{r}
+metadata_bac <- subset(metadata, PCR == "B")
+metadata_arc <- subset(metadata, PCR == "A")
+```
+
+Check if sample names and feature names are matched.
+
+```{r}
+identical(rownames(feature_table_arc), rownames(taxonomy_arc))
+identical(colnames(feature_table_arc), rownames(metadata_arc))
+identical(rownames(feature_table_bac), rownames(taxonomy_bac))
+identical(colnames(feature_table_bac), rownames(metadata_bac))
+```
+
+# 2 Taxonomy curation
+
+## 2.1 Define a function for taxonomy curation
+
+```{r}
+tidy_tax<-function(tax){
+
+  tax <- data.frame(str_split_fixed(tax$Taxon, "; " ,7),row.names = rownames(tax))
+  tax <- apply(tax, 2, function(x){
+    x[grep("^[^a-z_]",x)]<-""
+    return(x)
+  })
+  tax<-apply(tax,2,function(x)substring(x,4))
+  
+  tax <- as.data.frame(tax)
+  colnames(tax)<-c("Kingdom","Phylum","Class","Order","Family","Genus","Species")
+  return(tax)
+}
+
+```
+
+## 2.2 Taxonomy curation
+
+```{r}
+taxonomy_arc <- tidy_tax(taxonomy_arc)
+taxonomy_bac <- tidy_tax(taxonomy_bac)
+```
+
+# 3. Feature and taxonomy filtering
+
+Taxonomy of PCR library amplified by Arch349-Arch806 primers contains bacterial species, these bacteria are deleted from taxonomy.
+
+```{r}
+taxonomy_arc <- subset(taxonomy_arc, Kingdom == "Archaea")
+feature_table_arc <- feature_table_arc[rownames(taxonomy_arc), ]
+```
+
+ASVs that are present in at least 3 samples were remained. This can improve resolution and limit FDR (false discovery rate) penalty on features that are too far below the noise threshold to be applicable to a statistical test.
+
+```{r}
+feature_table_bac <-  feature_table_bac[rowSums(feature_table_bac>0) > 2, ] 
+feature_table_arc <-  feature_table_arc[rowSums(feature_table_arc>0) > 2, ] 
+```
+
+# 4. Differential taxa: Bacteria
+
+## 4.1 Differential taxa between phases
+
+LEfSe analysis
+
+```{r}
+lefse_phase_bac <- diff_analysis(data.frame(t(feature_table_bac)),
+                 sampleda = metadata_bac,
+                 taxda = taxonomy_bac,
+                 classgroup = "Phase", subclass = "Diet", 
+                 
+                 mlfun="lda",
+                 clwilc=FALSE, #whether to perform test of per classgroup, default is TRUE
+                 strictmod = FALSE, # whether to performed in one-against-one, default is TRUE (strict), when subgroup is provided
+                 padjust = "fdr",
+                 filtermod="fdr",
+                 firstcomfun = "kruskal.test",
+                 firstalpha=0.01,
+                 secondcomfun = "wilcox.test",
+                 secondalpha=0.01,
+                 lda=3
+                 )
+lefse_phase_bac
+```
+
+Clade plot
+
+```{r message=FALSE, warning=FALSE}
+clade_phase_bac <- lefse_phase_bac %>% 
+  ggdiffclade(obj=.,
+              alpha=0.3, linewd=0.2, cladetext = 3, reduce = FALSE,
+              skpointsize=0.6, 
+              taxlevel=6,
+              settheme=FALSE,  
+              setColors=FALSE) +
+  scale_fill_nejm()+
+  guides(color = guide_legend(keywidth = 0.5,
+                              keyheight = 0.5,
+                              order = 3)) + 
+  guides(fill=guide_legend(order = 1,reverse = T,keyheight = 0.5,keywidth = 0.5))+
+  theme(panel.background=element_rect(fill=NA),
+        legend.position="right",
+        legend.spacing.y = unit(0.3, "cm"),
+        legend.title=element_text(size=12),
+        legend.text=element_text(size=10))
+clade_phase_bac
+ggsave("Results/3-Differential_taxa_phase_bac.png", clade_phase_bac, width = 9, height = 6)
+```
+
+
+Box plot
+
+```{r message=FALSE, warning=FALSE, paged.print=FALSE}
+box_phase_bac <- lefse_phase_bac %>%
+  ggdiffbox(obj=., 
+            box_notch=FALSE, box_width = 0.08, 
+            colorlist=pal_nejm()(3),
+            l_xlabtext="Relative abundance") 
+box_phase_bac
+
+
+ggsave("Results/3-Differential_taxa_phase_boxplot_bac.png",box_phase_bac, width = 9, height = 6)
+
+```
+
+## 4.2 Differential taxa between diets
+
+LEfSe analysis
+
+```{r}
+lefse_diet_bac <- diff_analysis(data.frame(t(feature_table_bac)),
+                 sampleda = metadata_bac,
+                 taxda = taxonomy_bac,
+                 classgroup = "Diet", subclass = "Phase", 
+                 
+                 mlfun = "lda",
+                 clwilc = FALSE, #whether to perform test of per classgroup, default is TRUE
+                 strictmod = FALSE, # whether to performed in one-against-one, default is TRUE (strict), when subgroup is provided
+                 padjust = "fdr",
+                 filtermod = "pvalue",
+                 firstcomfun = "kruskal.test",
+                 firstalpha = 0.01,
+                 secondcomfun = "wilcox.test",
+                 secondalpha = 0.01,
+                 lda = 3
+                 )
+lefse_diet_bac
+```
+
+Clade plot
+
+```{r message=FALSE, warning=FALSE, paged.print=FALSE}
+clade_diet_bac <- lefse_diet_bac %>% 
+  ggdiffclade(obj=.,
+              alpha=0.3, linewd=0.2, cladetext = 3, reduce = FALSE,
+              skpointsize=0.6, 
+              taxlevel=6,
+              settheme=FALSE,  
+              setColors=FALSE) +
+  scale_fill_aaas()+
+  guides(color = guide_legend(keywidth = 0.5,
+                              keyheight = 0.5,
+                              order = 3)) + 
+  guides(fill=guide_legend(order = 1,reverse = T,keyheight = 0.5,keywidth = 0.5))+
+  theme(panel.background=element_rect(fill=NA),
+        legend.position="right",
+        legend.spacing.y = unit(0.3, "cm"),
+        legend.title=element_text(size=12),
+        legend.text=element_text(size=10))
+clade_diet_bac
+ggsave("Results/3-Differential_taxa_diet_bac.png", clade_diet_bac, width = 9, height = 6)
+```
+
+
+Box plot
+
+```{r message=FALSE, warning=FALSE, paged.print=FALSE}
+box_diet_bac <- lefse_diet_bac %>%
+  ggdiffbox(obj=., 
+            box_notch=FALSE, box_width = 0.08, 
+            colorlist=pal_aaas()(3),
+            l_xlabtext="Relative abundance")
+
+box_diet_bac
+
+ggsave("Results/3-Differential_taxa_diet_boxplot_bac.png",box_diet_bac, width = 9, height = 6)
+```
+
+
+
+
+# 5. Differential taxa: Archaea
+
+## 5.1 Differential taxa between phases
+
+LEfSe analysis
+
+```{r}
+lefse_phase_arc <- diff_analysis(data.frame(t(feature_table_arc)),
+                 sampleda = metadata_arc,
+                 taxda = taxonomy_arc,
+                 classgroup = "Phase", subclass = "Diet", 
+                 
+                 mlfun="lda",
+                 clwilc=FALSE, #whether to perform test of per classgroup, default is TRUE
+                 strictmod = FALSE, # whether to performed in one-against-one, default is TRUE (strict), when subgroup is provided
+                 padjust = "fdr",
+                 filtermod="fdr",
+                 firstcomfun = "kruskal.test",
+                 firstalpha=0.05,
+                 secondcomfun = "wilcox.test",
+                 secondalpha=0.05,
+                 lda=3
+                 )
+lefse_phase_arc
+```
+
+Clade plot
+
+```{r message=FALSE, warning=FALSE, paged.print=FALSE}
+clade_phase_arc <- lefse_phase_arc %>% 
+  ggdiffclade(obj=.,
+              alpha=0.3, linewd=0.2, cladetext = 3, reduce = FALSE,
+              skpointsize=0.6, 
+              taxlevel=6,
+              settheme=FALSE,  
+              setColors=FALSE) +
+  scale_fill_nejm()+
+  guides(color = guide_legend(keywidth = 0.5,
+                              keyheight = 0.5,
+                              order = 3)) + 
+  guides(fill=guide_legend(order = 1,reverse = T,keyheight = 0.5,keywidth = 0.5))+
+  theme(panel.background=element_rect(fill=NA),
+        legend.position="right",
+        legend.spacing.y = unit(0.3, "cm"),
+        legend.title=element_text(size=12),
+        legend.text=element_text(size=10))
+clade_phase_arc
+ggsave("Results/3-Differential_taxa_phase_arc.png", clade_phase_arc, width = 9, height = 6)
+```
+
+
+Box plot
+
+```{r message=FALSE, warning=FALSE, paged.print=FALSE}
+box_phase_arc <- lefse_phase_arc %>%
+  ggdiffbox(obj=., 
+            box_notch=FALSE, box_width = 0.08, 
+            colorlist=pal_nejm()(3), 
+            l_xlabtext="Relative abundance")
+
+box_phase_arc
+
+ggsave("Results/3-Differential_taxa_phase_boxplot_arc.png",box_phase_arc, width = 9, height = 6)
+
+```
+
+## 5.2 Differential taxa between diets
+
+LEfSe analysis
+
+```{r}
+lefse_diet_arc <- diff_analysis(data.frame(t(feature_table_arc)),
+                 sampleda = metadata_arc,
+                 taxda = taxonomy_arc,
+                 classgroup = "Diet", subclass = "Phase", 
+                 
+                 mlfun = "lda",
+                 clwilc = FALSE, #whether to perform test of per classgroup, default is TRUE
+                 strictmod = FALSE, # whether to performed in one-against-one, default is TRUE (strict), when subgroup is provided
+                 padjust = "fdr",
+                 filtermod = "pvalue",
+                 firstcomfun = "kruskal.test",
+                 firstalpha = 0.05,
+                 secondcomfun = "wilcox.test",
+                 secondalpha = 0.05,
+                 lda = 3
+                 )
+lefse_diet_arc
+```
+
+Clade plot
+
+```{r message=FALSE, warning=FALSE, paged.print=FALSE}
+clade_diet_arc <- lefse_diet_arc %>% 
+  ggdiffclade(obj=.,
+              alpha=0.3, linewd=0.2, cladetext = 3, reduce = FALSE,
+              skpointsize=0.6, 
+              taxlevel=6,
+              settheme=FALSE,  
+              setColors=FALSE) +
+  scale_fill_aaas()+
+  guides(color = guide_legend(keywidth = 0.5,
+                              keyheight = 0.5,
+                              order = 3)) + 
+  guides(fill=guide_legend(order = 1,reverse = T,keyheight = 0.5,keywidth = 0.5))+
+  theme(legend.position="right",
+        legend.spacing.y = unit(0.3, "cm"),
+        legend.title=element_text(size=12),
+        legend.text=element_text(size=10))
+clade_diet_arc
+ggsave("Results/3-Differential_taxa_diet_arc.png", clade_diet_arc, width = 9, height = 6)
+```
+
+
+Box plot
+
+```{r message=FALSE, warning=FALSE, paged.print=FALSE}
+box_diet_arc <- ggdiffbox(lefse_diet_arc, 
+                          box_notch=FALSE, box_width = 0.08, 
+                          colorlist=pal_aaas()(3),
+                          l_xlabtext="Relative abundance")
+box_diet_arc
+
+ggsave("Results/3-Differential_taxa_diet_boxplot_arc.png",box_diet_arc, width = 9, height = 6)
+```
+
+
+
+
+
+
