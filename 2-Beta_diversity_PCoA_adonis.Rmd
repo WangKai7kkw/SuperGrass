@@ -17,13 +17,6 @@ library(vegan)
 
 ## 1.1 Bacteria
 
-```{r}
-'Results/2-core-metrics_bac/bray_curtis_distance_matrix.qza'
-'Results/2-core-metrics_bac/unweighted_unifrac_distance_matrix.qza'
-'Results/2-core-metrics_bac/weighted_unifrac_distance_matrix.qza'
-'Results/2-core-metrics_bac/jaccard_distance_matrix.qza'
-```
-
 ```{r message=FALSE, warning=FALSE}
 # bray curtis
 system('qiime tools export \\
@@ -120,6 +113,12 @@ metadata[, 'Phase'] <- do.call(paste,
                                    string = metadata$`Description [sample]`, 
                                    pattern = ' ', n = 3)[, 1:2]))
 metadata[, 'Diet'] <- str_split_fixed(string = metadata$`Description [sample]`, pattern = ' ', n = 3)[, 3]
+
+metadata$Phase <- factor(metadata$Phase, levels = c("solid phase", "liquid phase", "rumen fluid"), 
+                         labels = c("Solid phase", "Liquid phase", "Rumen fluid"))
+
+metadata$Diet <- factor(metadata$Diet, levels = c("corn", "grass", "hay"), 
+                         labels = c("Corn silage", "Grass silage", "Grass hay"))
 ```
 
 ```{r}
@@ -130,7 +129,7 @@ head(metadata)
 
 # 3. Visualization, scatter plot
 
-# 3.1 Function
+# 3.1 Visualization function
 
 ```{r message=FALSE, warning=FALSE}
 vis <- function(distance_matrix, map, color = "", shape = "", point_size = 2){
@@ -171,20 +170,56 @@ vis <- function(distance_matrix, map, color = "", shape = "", point_size = 2){
 
 ## 3.2 Bacteria
 
+Bray Curtis
+
 ```{r message=FALSE, warning=FALSE}
-vis(data_bac$bray_curtis_matrix, metadata, color = "Phase", shape = "Diet")
-vis(data_bac$jaccard, metadata, color = "Phase", shape = "Diet")
-vis(data_bac$unweighted_unifrac, metadata, color = "Phase", shape = "Diet")
-vis(data_bac$weighted_unifrac, metadata, color = "Phase", shape = "Diet")
+pcoa_bray_curtis_bac <- vis(data_bac$bray_curtis_matrix, 
+                            metadata, 
+                            color = "Phase", shape = "Diet") + 
+  scale_color_nejm() +
+  guides(color = guide_legend(order = 1))
+pcoa_bray_curtis_bac
+ggsave("Results/2-pcoa_bray_curtis_bac.png",pcoa_bray_curtis_bac, width = 9, height = 6)
+```
+Jaccard, Unweighted Unifrac, Weighted Unifrac
+
+```{r message=FALSE, warning=FALSE, paged.print=FALSE}
+vis(data_bac$jaccard, metadata, color = "Phase", shape = "Diet") + 
+  scale_color_nejm() + guides(color = guide_legend(order = 1))
+
+vis(data_bac$unweighted_unifrac, metadata, color = "Phase", shape = "Diet") + 
+  scale_color_nejm() + guides(color = guide_legend(order = 1))
+
+vis(data_bac$weighted_unifrac, metadata, color = "Phase", shape = "Diet") + 
+  scale_color_nejm() + guides(color = guide_legend(order = 1))
+```
+## 3.2 Archaea
+
+Bray Curtis
+
+```{r message=FALSE, warning=FALSE}
+pcoa_bray_curtis_arc <- vis(data_arc$bray_curtis_matrix, 
+                            metadata, 
+                            color = "Phase", shape = "Diet") + 
+  scale_color_nejm() +
+  guides(color = guide_legend(order = 1))
+pcoa_bray_curtis_arc
+ggsave("Results/2-pcoa_bray_curtis_arc.png",pcoa_bray_curtis_arc, width = 9, height = 6)
+```
+Jaccard, Unweighted Unifrac, Weighted Unifrac
+
+```{r message=FALSE, warning=FALSE, paged.print=FALSE}
+vis(data_arc$jaccard, metadata, color = "Phase", shape = "Diet") + 
+  scale_color_nejm() + guides(color = guide_legend(order = 1))
+
+vis(data_arc$unweighted_unifrac, metadata, color = "Phase", shape = "Diet") + 
+  scale_color_nejm() + guides(color = guide_legend(order = 1))
+
+vis(data_arc$weighted_unifrac, metadata, color = "Phase", shape = "Diet") + 
+  scale_color_nejm() + guides(color = guide_legend(order = 1))
 ```
 
-## 3.3 Archaea
-```{r message=FALSE, warning=FALSE}
-vis(data_arc$bray_curtis_matrix, metadata, color = "Phase", shape = "Diet")
-vis(data_arc$jaccard, metadata, color = "Phase", shape = "Diet")
-vis(data_arc$unweighted_unifrac, metadata, color = "Phase", shape = "Diet")
-vis(data_arc$weighted_unifrac, metadata, color = "Phase", shape = "Diet")
-```
+
 
 # 4. Adonis
 
